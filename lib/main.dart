@@ -6,6 +6,7 @@ import 'package:highlight/languages/java.dart' as java;
 import 'package:highlight/languages/cpp.dart' as cpp;
 import 'package:highlight/languages/python.dart' as python;
 import 'package:highlight/languages/javascript.dart' as javascript;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MaterialApp(
@@ -24,7 +25,6 @@ class CodeEditor extends StatefulWidget {
 class _CodeEditorState extends State<CodeEditor> {
   CodeController? _codeController;
   String selectedLanguage = 'Dart';
-
   final Map<String, dynamic> languages = {
     'Dart': {
       'highlighter': dart.dart,
@@ -54,7 +54,8 @@ class _CodeEditorState extends State<CodeEditor> {
   @override
   void initState() {
     super.initState();
-    _initializeCodeController('Dart'); // Initialize with Dart as default
+    _initializeCodeController(selectedLanguage);
+    _loadSavedCode(); // Load previously saved code state
   }
 
   void _initializeCodeController(String language) {
@@ -69,8 +70,44 @@ class _CodeEditorState extends State<CodeEditor> {
     setState(() {});
   }
 
+  Future<void> _loadSavedCode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedCode = prefs.getString(selectedLanguage) ??
+        languages[selectedLanguage]['sampleCode'];
+    setState(() {
+      _codeController!.text = savedCode;
+    });
+  }
+
+  Future<void> _saveCode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(selectedLanguage, _codeController!.text);
+  }
+
+  // Basic error detection (unmatched braces)
+  void _checkForErrors() {
+    final code = _codeController?.text ?? '';
+    if (!_isBracesBalanced(code)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text("Syntax Error: Unmatched braces detected!")),
+      );
+    }
+  }
+
+  bool _isBracesBalanced(String code) {
+    int balance = 0;
+    for (var char in code.runes) {
+      if (char == '{'.codeUnitAt(0)) balance++;
+      if (char == '}'.codeUnitAt(0)) balance--;
+      if (balance < 0) return false;
+    }
+    return balance == 0;
+  }
+
   @override
   void dispose() {
+    _saveCode(); // Save code on exit
     _codeController?.dispose();
     super.dispose();
   }
@@ -101,6 +138,11 @@ class _CodeEditorState extends State<CodeEditor> {
                     Text(language, style: const TextStyle(color: Colors.black)),
               );
             }).toList(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.check),
+            onPressed: _checkForErrors,
+            tooltip: 'Check for Syntax Errors',
           ),
         ],
       ),
